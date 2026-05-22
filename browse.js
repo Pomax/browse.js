@@ -98,7 +98,6 @@ const contentType = `Content-Type`;
 const cacheControl = `Cache-Control`;
 const base = normalize(import.meta.dirname);
 const formats = [`jpg`, `jpeg`, `png`, `webp`];
-const npm = process.platform === `win32` ? `npm.cmd` : `npm`;
 const unwantedDataPaths = [`@eaDir`, `.DS_Store`, `Thumbs.db`];
 
 // SET THIS TO WHATEVER WORKS FOR YOU:
