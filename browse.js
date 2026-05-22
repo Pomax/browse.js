@@ -65,7 +65,9 @@
  *
  * ## Contact
  *
- * Either hit up the issue tracker over on
+ * Either hit up the issue tracker over on the issue tracker
+ * https://github.com/Pomax/browse.js/issues, or toot at
+ * me on https://mastodon.social/users/@TheRealPomax
  */
 
 import { createServer } from "node:http";
