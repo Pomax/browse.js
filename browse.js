@@ -8,9 +8,12 @@
  * ## How to run
  *
  * Simply run `node browse` in the folder that you've placed
- * browse.js in. It will treat its own folder as root, and
+ * `browse.js` in. It will treat its own folder as root, and
  * allow you to browser any subfolder as either a dir listing
  * (if there are no images in it) or gallery (if there are).
+ * 
+ * If you need a custom port use `node browse --port 12345
+ * with the obvious port number replacement.
  *
  * ## Requirements
  *
@@ -92,13 +95,14 @@ import {
  *                                                               *
  *****************************************************************/
 
-const port = 8080;
 const imageCacheDuration = 604800;
 const contentType = `Content-Type`;
 const cacheControl = `Cache-Control`;
 const base = normalize(import.meta.dirname);
 const formats = [`jpg`, `jpeg`, `png`, `webp`];
+const npm = process.platform === `win32` ? `npm.cmd` : `npm`;
 const unwantedDataPaths = [`@eaDir`, `.DS_Store`, `Thumbs.db`];
+const port = process.argv[process.argv.indexOf(`--port`) + 1] ?? 8080;
 
 // SET THIS TO WHATEVER WORKS FOR YOU:
 const concurrency = 5;
