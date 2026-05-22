@@ -7,7 +7,7 @@ all your images, and then just fire up http:/localhost:8080
 ## How to run
 
 Simply run `node browse` in the folder that you've placed
-browse.js in. It will treat its own folder as root, and
+`browse.js` in. It will treat its own folder as root, and
 allow you to browser any subfolder as either a dir listing
 (if there are no images in it) or gallery (if there are).
 
