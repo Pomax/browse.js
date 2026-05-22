@@ -11,6 +11,9 @@ Simply run `node browse` in the folder that you've placed
 allow you to browser any subfolder as either a dir listing
 (if there are no images in it) or gallery (if there are).
 
+If you need a custom port use `node browse --port 12345
+with the obvious port number replacement.
+
 ## Requirements
 
 - Node 22 or newer
