@@ -2,17 +2,14 @@
  * # Browse dot JS
  *
  * A super-simple but super-useful image browsing script.
- * Run as `node browse.js` in whatever toplevel dir houses
- * all your images, and then just fire up http:/localhost:8080
+ * Run as `node browse` in whatever toplevel dir houses all
+ * your images, and then just fire up http:/localhost:8080
  *
- * ## How to run
+ * It will treat its own folder as root, and allow you to
+ * browse any subfolder as either a dir listing (if there are
+ * no images in it) or gallery (if there are).
  *
- * Simply run `node browse` in the folder that you've placed
- * `browse.js` in. It will treat its own folder as root, and
- * allow you to browser any subfolder as either a dir listing
- * (if there are no images in it) or gallery (if there are).
- * 
- * If you need a custom port use `node browse --port 12345
+ * Or, if you need a custom port use `node browse --port 12345`
  * with the obvious port number replacement.
  *
  * ## Requirements
