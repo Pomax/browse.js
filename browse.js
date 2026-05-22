@@ -165,7 +165,6 @@ const CSS = {
     right: 1.5vw;
   }
 
-
   .gallery {
     display: flex;
     flex-direction: row;
