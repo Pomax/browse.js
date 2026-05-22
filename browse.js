@@ -1,9 +1,16 @@
 /**
- * # Browse dot js
+ * # Browse dot JS
  *
  * A super-simple but super-useful image browsing script.
  * Run as `node browse.js` in whatever toplevel dir houses
  * all your images, and then just fire up http:/localhost:8080
+ *
+ * ## How to run
+ *
+ * Simply run `node browse` in the folder that you've placed
+ * browse.js in. It will treat its own folder as root, and
+ * allow you to browser any subfolder as either a dir listing
+ * (if there are no images in it) or gallery (if there are).
  *
  * ## Requirements
  *
@@ -13,14 +20,9 @@
  * ## Code notes
  *
  * This code is organized in blocks that any IDE should be able
- * to collapse/expand as needed to keep it easy to work on.
- *
- * ## How to run
- *
- * Simply run `node browse` in the folder that you've placed
- * browse.js in. It will treat its own folder as root, and
- * allow you to browser any subfolder as either a dir listing
- * (if there are no images in it) or gallery (if there are).
+ * to collapse/expand as needed to keep it easy to work on. But,
+ * if your editor has no collapse/expand, there's also heading
+ * comments to find your way around the code.
  *
  * ## How to browse
  *
@@ -91,13 +93,15 @@ import {
  *****************************************************************/
 
 const port = 8080;
-const base = normalize(import.meta.dirname);
-const npm = process.platform === `win32` ? `npm.cmd` : `npm`;
-const unwantedDataPaths = [`@eaDir`, `.DS_Store`, `Thumbs.db`];
-const formats = [`jpg`, `jpeg`, `png`, `webp`];
+const imageCacheDuration = 604800;
 const contentType = `Content-Type`;
 const cacheControl = `Cache-Control`;
-const imageCacheDuration = 604800;
+const base = normalize(import.meta.dirname);
+const formats = [`jpg`, `jpeg`, `png`, `webp`];
+const npm = process.platform === `win32` ? `npm.cmd` : `npm`;
+const unwantedDataPaths = [`@eaDir`, `.DS_Store`, `Thumbs.db`];
+
+// SET THIS TO WHATEVER WORKS FOR YOU:
 const concurrency = 5;
 
 /*****************************************************************
@@ -106,15 +110,16 @@ const concurrency = 5;
  *                                                               *
  *****************************************************************/
 
-const pageCSS = `html {
+const CSS = {
+  page: `html {
   font-size: 2vh!important;
 
   a, a:active, a:hover, a:visited {
     color: blue;
   }
-`;
+`,
 
-const dirlistCSS = `html {
+  dirlisting: `html {
   ol.dirlist {
     &.with-covers {
      list-style: none;
@@ -136,9 +141,9 @@ const dirlistCSS = `html {
     }
   }
 }
-`;
+`,
 
-const galleryCSS = `html {
+  gallery: `html {
   h1 {
     display: inline-block;
     font-size: 2rem !important;
@@ -205,7 +210,8 @@ const galleryCSS = `html {
     }
   }
 }
-`;
+`,
+};
 
 /*****************************************************************
  *                                                               *
@@ -213,116 +219,128 @@ const galleryCSS = `html {
  *                                                               *
  *****************************************************************/
 
-// generate an image with a lazy-load data attribute instead of src attribute
-function img(src, position) {
-  return `<img id="img-${position}" width="200" height="300" title="${src}" data-src="./${encodeURIComponent(src)}">`;
-}
-
-// generate a link
-function a(href, label = href, img = ``) {
-  return `<a href="${href}">${img}${label}</a>`;
-}
-
-// generate a <div> element
-function div(content, className = ``) {
-  return `<div class="${className}">\n${content}\n</div>`;
-}
-
-// generate a <script> element either for plain text or an IIFE
-function script(fn) {
-  if (typeof fn === `string`) return `\n<script>\n${fn}\n</script>`;
-  return `\n<script>\n(${fn.toString()})();\n</script>`;
-}
-
-// generate a <style> element
-function style(css) {
-  return `<style>${css}</style>`;
-}
-
-// our main document scaffolding
-function template(path, content) {
-  return `<html lang="en" translate="no">
+const Template = {
+  // our main document scaffolding
+  create: function (path, content) {
+    return `<html lang="en" translate="no">
   <head>
     <meta charset="utf-8">
     <title>${path.match(/[^\/]+\/?$/)?.[0]?.replaceAll(`/`, ``)}</title>
-    ${style(pageCSS)}
+    ${Template.style(CSS.page)}
     <script>globalThis.path = "${encodeURIComponent(path)}";</script>
   </head>
   <body>
-    ${script(goUp.toString())}
+    ${Template.script(ClientSide.goUp.toString())}
     ${content}
   </body>
 </html>
   `;
-}
+  },
 
-/**
- * A very simple HTML document builder
- */
-function createPage(path, isDir, root = false) {
-  if (isDir) {
-    const content = readdirSync(path).filter((e) => filterForImage(path, e));
-    const hasImages = isGalleryDir(path);
-    if (!hasImages) {
-      // standard dir listing
-      return template(path, generateDirListing(path, content, root));
-    }
-    // image gallery
-    sortDirContent(path, content);
-    return template(path, generateGallery(path, content));
-  }
-  // ...what was this???
-  return template(path);
-}
+  // generate an image with a lazy-load data attribute instead of src attribute
+  img: function (src, position) {
+    return `<img id="img-${position}" width="200" height="300" title="${src}" data-src="./${encodeURIComponent(src)}">`;
+  },
 
-/**
- * Generate the gallery HTML.
- */
-function generateGallery(path, content) {
-  const title = path.split(`/`).at(-2);
-  const topRow = `<a href="..">[↰ up]</a></span><h1>${title}</h1><button class="delete">delete</button>`;
-  return `
-    ${style(galleryCSS)}
-    ${topRow}
-    ${div(content.map(img).join(`\n      `), `gallery`)}
-    ${script(`const concurrency = ${concurrency};`)}
-    ${script(imageNavigation)}
-    ${script(deleteFolder)}
-  `;
-}
+  // generate a link
+  a: function (href, label = href, img = ``) {
+    return `<a href="${href}">${img}${label}</a>`;
+  },
 
-/**
- * Generate an HTML dir listing.
- */
-function generateDirListing(path, content, root) {
-  const topRow = `<p>${root ? `` : `<a href="..">[↰ up]</a>`}</p>`;
-  let haveCovers = false;
-  const items = content
-    .map((e) => {
-      const isDir = statSync(path + `/` + e).isDirectory();
-      const href = `./${encodeURIComponent(e)}/`;
-      const label = `${isDir ? `📁 ` : ``}${e}`;
-      let first = readdirSync(path + `/` + e)?.[0];
-      if (!isImage(first)) {
-        first = undefined;
-      } else {
-        first = `<img src="${href + encodeURIComponent(first)}">`;
-        haveCovers = true;
+  // generate a <div> element
+  div: function (content, className = ``) {
+    return `<div class="${className}">\n${content}\n</div>`;
+  },
+
+  // generate a <script> element either for plain text or an IIFE
+  script: function (fn) {
+    if (typeof fn === `string`) return `\n<script>\n${fn}\n</script>`;
+    return `\n<script>\n(${fn.toString()})();\n</script>`;
+  },
+
+  // generate a <style> element
+  style: function (css) {
+    return `<style>${css}</style>`;
+  },
+};
+
+/*****************************************************************
+ *                                                               *
+ *                   TEMPLATING: GENERATORS                      *
+ *                                                               *
+ *****************************************************************/
+
+const Generator = {
+  /**
+   * A very simple HTML document builder
+   */
+  page: function (path, isDir, root = false) {
+    if (isDir) {
+      const content = readdirSync(path).filter((e) =>
+        Utils.filterForImage(path, e),
+      );
+      const hasImages = Utils.isGalleryDir(path);
+      if (!hasImages) {
+        // standard dir listing
+        return Template.create(path, Generator.dirListing(path, content, root));
       }
-      return `<li>${a(href, label, first)}</li>`;
-    })
-    .join(`\n      `);
+      // image gallery
+      Utils.sortDirContent(path, content);
+      return Template.create(path, Generator.gallery(path, content));
+    }
+    // ...what was this???
+    return Template.create(path);
+  },
 
-  return `
-    ${style(dirlistCSS)}
+  /**
+   * Generate the gallery HTML.
+   */
+  gallery: function (path, content) {
+    const title = path.split(`/`).at(-2);
+    const topRow = `<a href="..">[↰ up]</a></span><h1>${title}</h1><button class="delete">delete</button>`;
+    return `
+    ${Template.style(CSS.gallery)}
+    ${topRow}
+    ${Template.div(content.map(Template.img).join(`\n      `), `gallery`)}
+    ${Template.script(`const concurrency = ${concurrency};`)}
+    ${Template.script(ClientSide.imageNavigation)}
+    ${Template.script(ClientSide.deleteFolder)}
+  `;
+  },
+
+  /**
+   * Generate an HTML dir listing.
+   */
+  dirListing: function (path, content, root) {
+    const topRow = `<p>${root ? `` : `<a href="..">[↰ up]</a>`}</p>`;
+    let haveCovers = false;
+    const items = content
+      .map((e) => {
+        const isDir = statSync(path + `/` + e).isDirectory();
+        const href = `./${encodeURIComponent(e)}/`;
+        const label = `${isDir ? `📁 ` : ``}${e}`;
+        let first = readdirSync(path + `/` + e)?.[0];
+        if (!Utils.isImage(first)) {
+          first = undefined;
+        } else {
+          first = `<img src="${href + encodeURIComponent(first)}">`;
+          haveCovers = true;
+        }
+        return `<li>${Template.a(href, label, first)}</li>`;
+      })
+      .join(`\n      `);
+
+    return `
+    ${Template.style(CSS.dirlisting)}
     ${topRow}
     <ol class="dirlist ${haveCovers ? `with-covers` : ``}">
       ${items}
     </ol>
-    ${script(goUpKeyHandler)}
-    ${script(zipfileHandler)}
+    ${Template.script(ClientSide.goUpKeyHandler)}
+    ${Template.script(ClientSide.zipfileHandler)}
   `;
-}
+  },
+};
 
 /*****************************************************************
  *                                                               *
@@ -330,222 +348,224 @@ function generateDirListing(path, content, root) {
  *                                                               *
  *****************************************************************/
 
-/**
- * Add file-drop handling.
- *
- * This function gets IIFE templated into dir listing pages.
- */
-function zipfileHandler(path = globalThis.path) {
-  ["dragenter", "dragover", "dragleave", "drop"].forEach((eventName) => {
-    window.addEventListener(eventName, (e) => e.preventDefault(), false);
-  });
+const ClientSide = {
+  /**
+   * Add file-drop handling.
+   *
+   * This function gets IIFE templated into dir listing pages.
+   */
+  zipfileHandler: function zipfileHandler(path = globalThis.path) {
+    ["dragenter", "dragover", "dragleave", "drop"].forEach((eventName) => {
+      window.addEventListener(eventName, (e) => e.preventDefault(), false);
+    });
 
-  window.addEventListener("drop", (e) => {
-    e.preventDefault();
-    uploadFiles(e.dataTransfer.files ?? []);
-  });
+    window.addEventListener("drop", (e) => {
+      e.preventDefault();
+      uploadFiles(e.dataTransfer.files ?? []);
+    });
 
-  async function submit(file, path) {
-    try {
-      const response = await fetch(
-        `/upload?name=${encodeURIComponent(file.name)}&path=${path}`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": file.type || "application/octet-stream",
+    async function submit(file, path) {
+      try {
+        const response = await fetch(
+          `/upload?name=${encodeURIComponent(file.name)}&path=${path}`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": file.type || "application/octet-stream",
+            },
+            body: file,
           },
-          body: file,
-        },
-      );
-      const result = await response.json();
-      console.log("Upload successful:", result);
-    } catch (error) {
-      console.error("Upload failed:", error);
-    }
-  }
-
-  async function uploadFiles(files) {
-    if (!files || files.length === 0) return;
-    await Promise.all([...files].map((file) => submit(file, path)));
-    location.reload();
-  }
-}
-
-/**
- * Navigate to the current URL's parent path.
- *
- * This function gets IIFE templated into all pages.
- */
-function goUp() {
-  const newURL = location.toString().replace(/[^\/]+\/?$/, ``);
-  if (newURL === `http://`) return;
-  window.location.href = newURL;
-}
-
-/**
- * Trigger a "go up" action based on key input.
- *
- * This function gets IIFE templated into all pages.
- */
-function goUpKeyHandler() {
-  document.addEventListener(`keydown`, (evt) => {
-    const { key } = evt;
-    if (key === `Escape` || key === `ArrowUp`) {
-      evt.preventDefault();
-      goUp();
-    }
-  });
-}
-
-/**
- * Add image navigation to all <img> on the page.
- *
- * This function gets IIFE templated into gallery pages.
- */
-function imageNavigation() {
-  let fullscreen;
-  const imgs = [...document.querySelectorAll(`img`)];
-
-  // un-fullscreen a gallery view
-  function unload(bypassHistory = false) {
-    if (fullscreen) {
-      const img = fullscreen;
-      fullscreen.classList.remove(`full`);
-      fullscreen = undefined;
-      setTimeout(() => img.scrollIntoView(), 1);
-    }
-    if (!bypassHistory) history.pushState({}, ``, `./`);
-  }
-
-  // load an image full screen
-  function load(idx, bypassHistory = false) {
-    if (idx === false) return unload();
-    fullscreen?.classList.remove(`full`);
-    fullscreen = imgs[idx];
-    fullscreen?.classList.add(`full`);
-    if (!bypassHistory) history.pushState({}, ``, `./${idx}`);
-  }
-
-  // show the previous image
-  function prev(pos = imgs.indexOf(fullscreen)) {
-    if (pos > 0) load(pos - 1);
-  }
-
-  // show the next image
-  function next(pos = imgs.indexOf(fullscreen)) {
-    if (pos < imgs.length - 1) load(pos + 1);
-  }
-
-  // either exit fullscreen or go up a dir, depending on
-  // whether or not we're looking at a full screen image
-  function cancel(evt) {
-    evt?.preventDefault();
-    fullscreen ? load(false) : goUp();
-  }
-
-  // Key handling...
-  document.addEventListener(`keydown`, (evt) => {
-    const { key } = evt;
-    if (key === `Escape` || key === `ArrowUp`) cancel(evt);
-    if (key === `ArrowLeft` || key === `PageUp`)
-      fullscreen ? prev() : load(imgs.length - 1);
-    if (key === `ArrowRight` || key === `PageDown`)
-      fullscreen ? next() : load(0);
-    if (key === `Home`) load(0);
-    if (key === `End`) load(imgs.length - 1);
-  });
-
-  // Click handling...
-  document.addEventListener(`click`, (evt) => {
-    const img = evt.target;
-
-    // Is this a "show image" request?
-    let pos = -1;
-    if (img.tagName === `IMG`) {
-      pos = imgs.indexOf(img);
-      if (!fullscreen && pos >= 0) {
-        return load(pos);
+        );
+        const result = await response.json();
+        console.log("Upload successful:", result);
+      } catch (error) {
+        console.error("Upload failed:", error);
       }
     }
 
-    // If not, is this a fullscreen interaction?
-    if (fullscreen) {
-      pos = imgs.indexOf(fullscreen);
-      const rx = evt.pageX / innerWidth;
-      const ry = evt.pageY / innerHeight;
-      if (ry < 0.25) return cancel();
-      if (rx < 0.5) prev(pos);
-      if (rx > 0.5) next(pos);
+    async function uploadFiles(files) {
+      if (!files || files.length === 0) return;
+      await Promise.all([...files].map((file) => submit(file, path)));
+      location.reload();
     }
-  });
+  },
 
-  // And popstate handling, so we do the right thing
-  // on navigations with and without image suffixes.
-  window.addEventListener(`popstate`, (event) => {
-    const bypass = true;
-    const loc = location.toString().split(`/`);
-    const last = loc.at(-1);
-    if (!last && fullscreen) {
-      unload(bypass);
-    } else if (last) {
-      load(parseFloat(last), bypass);
+  /**
+   * Navigate to the current URL's parent path.
+   *
+   * This function gets IIFE templated into all pages.
+   */
+  goUp: function goUp() {
+    const newURL = location.toString().replace(/[^\/]+\/?$/, ``);
+    if (newURL === `http://`) return;
+    window.location.href = newURL;
+  },
+
+  /**
+   * Trigger a "go up" action based on key input.
+   *
+   * This function gets IIFE templated into all pages.
+   */
+  goUpKeyHandler: function goUpKeyHandler() {
+    document.addEventListener(`keydown`, (evt) => {
+      const { key } = evt;
+      if (key === `Escape` || key === `ArrowUp`) {
+        evt.preventDefault();
+        goUp();
+      }
+    });
+  },
+
+  /**
+   * Add image navigation to all <img> on the page.
+   *
+   * This function gets IIFE templated into gallery pages.
+   */
+  imageNavigation: function imageNavigation() {
+    let fullscreen;
+    const imgs = [...document.querySelectorAll(`img`)];
+
+    // un-fullscreen a gallery view
+    function unload(bypassHistory = false) {
+      if (fullscreen) {
+        const img = fullscreen;
+        fullscreen.classList.remove(`full`);
+        fullscreen = undefined;
+        setTimeout(() => img.scrollIntoView(), 1);
+      }
+      if (!bypassHistory) history.pushState({}, ``, `./`);
     }
-  });
 
-  // Then: do we need to immediately load an image?
-  const loadPos = parseFloat(location.toString().match(/\d+$/)?.[0]);
-  if (!isNaN(loadPos)) {
-    const img = imgs[loadPos];
-    img.src = encodeURIComponent(img.dataset.src);
-    load(loadPos);
-  }
+    // load an image full screen
+    function load(idx, bypassHistory = false) {
+      if (idx === false) return unload();
+      fullscreen?.classList.remove(`full`);
+      fullscreen = imgs[idx];
+      fullscreen?.classList.add(`full`);
+      if (!bypassHistory) history.pushState({}, ``, `./${idx}`);
+    }
 
-  // And irrespective of whether we did or not, start loading
-  // all images in this dir, one by one, in sequence. We don't
-  // want a million URLs all firing at the same time, loading
-  // things completely out of order.
-  const loadList = Array.from(imgs);
+    // show the previous image
+    function prev(pos = imgs.indexOf(fullscreen)) {
+      if (pos > 0) load(pos - 1);
+    }
 
-  function loadImages() {
-    if (loadList.length === 0) return;
-    const img = loadList.shift();
-    if (img.src) return loadImages();
-    img.onload = () => {
-      img.classList.remove(`loading`);
-      loadImages();
-    };
-    img.classList.add(`loading`);
-    img.src = img.dataset.src;
-  }
+    // show the next image
+    function next(pos = imgs.indexOf(fullscreen)) {
+      if (pos < imgs.length - 1) load(pos + 1);
+    }
 
-  for (let i = 0; i < concurrency; i++) loadImages();
-}
+    // either exit fullscreen or go up a dir, depending on
+    // whether or not we're looking at a full screen image
+    function cancel(evt) {
+      evt?.preventDefault();
+      fullscreen ? load(false) : goUp();
+    }
 
-/**
- * "Delete folder" functionality in gallery views.
- *
- * This function gets IIFE templated into gallery pages.
- */
-function deleteFolder(path = globalThis.path) {
-  const del = document.querySelector(`button.delete`);
-  del.addEventListener(`click`, async () => {
-    let yes = confirm(`Delete folder?`);
-    if (yes) {
-      yes = confirm(`Really delete folder? (There is NO undelete)`);
-      if (yes) {
-        const response = await fetch(`/delete?path=${path}`, {
-          method: "DELETE",
-        });
-        const result = await response.json();
-        if (result.success) {
-          location.href = "../";
-        } else {
-          alert(result.reason ?? `Unknown error occurred`);
+    // Key handling...
+    document.addEventListener(`keydown`, (evt) => {
+      const { key } = evt;
+      if (key === `Escape` || key === `ArrowUp`) cancel(evt);
+      if (key === `ArrowLeft` || key === `PageUp`)
+        fullscreen ? prev() : load(imgs.length - 1);
+      if (key === `ArrowRight` || key === `PageDown`)
+        fullscreen ? next() : load(0);
+      if (key === `Home`) load(0);
+      if (key === `End`) load(imgs.length - 1);
+    });
+
+    // Click handling...
+    document.addEventListener(`click`, (evt) => {
+      const img = evt.target;
+
+      // Is this a "show image" request?
+      let pos = -1;
+      if (img.tagName === `IMG`) {
+        pos = imgs.indexOf(img);
+        if (!fullscreen && pos >= 0) {
+          return load(pos);
         }
       }
+
+      // If not, is this a fullscreen interaction?
+      if (fullscreen) {
+        pos = imgs.indexOf(fullscreen);
+        const rx = evt.pageX / innerWidth;
+        const ry = evt.pageY / innerHeight;
+        if (ry < 0.25) return cancel();
+        if (rx < 0.5) prev(pos);
+        if (rx > 0.5) next(pos);
+      }
+    });
+
+    // And popstate handling, so we do the right thing
+    // on navigations with and without image suffixes.
+    window.addEventListener(`popstate`, (event) => {
+      const bypass = true;
+      const loc = location.toString().split(`/`);
+      const last = loc.at(-1);
+      if (!last && fullscreen) {
+        unload(bypass);
+      } else if (last) {
+        load(parseFloat(last), bypass);
+      }
+    });
+
+    // Then: do we need to immediately load an image?
+    const loadPos = parseFloat(location.toString().match(/\d+$/)?.[0]);
+    if (!isNaN(loadPos)) {
+      const img = imgs[loadPos];
+      img.src = img.dataset.src;
+      load(loadPos);
     }
-  });
-}
+
+    // And irrespective of whether we did or not, start loading
+    // all images in this dir, one by one, in sequence. We don't
+    // want a million URLs all firing at the same time, loading
+    // things completely out of order.
+    const loadList = Array.from(imgs);
+
+    function loadImages() {
+      if (loadList.length === 0) return;
+      const img = loadList.shift();
+      if (img.src) return loadImages();
+      img.onload = () => {
+        img.classList.remove(`loading`);
+        loadImages();
+      };
+      img.classList.add(`loading`);
+      img.src = img.dataset.src;
+    }
+
+    for (let i = 0; i < concurrency; i++) loadImages();
+  },
+
+  /**
+   * "Delete folder" functionality in gallery views.
+   *
+   * This function gets IIFE templated into gallery pages.
+   */
+  deleteFolder: function deleteFolder(path = globalThis.path) {
+    const del = document.querySelector(`button.delete`);
+    del.addEventListener(`click`, async () => {
+      let yes = confirm(`Delete folder?`);
+      if (yes) {
+        yes = confirm(`Really delete folder? (There is NO undelete)`);
+        if (yes) {
+          const response = await fetch(`/delete?path=${path}`, {
+            method: "DELETE",
+          });
+          const result = await response.json();
+          if (result.success) {
+            location.href = "../";
+          } else {
+            alert(result.reason ?? `Unknown error occurred`);
+          }
+        }
+      }
+    });
+  },
+};
 
 /*****************************************************************
  *                                                               *
@@ -553,84 +573,84 @@ function deleteFolder(path = globalThis.path) {
  *                                                               *
  *****************************************************************/
 
-/**
- * A helper function to determine if a dir is a gallery dir or
- * just a dir that happens to maybe have some images in it.
- */
-function isGalleryDir(path) {
-  const content = readdirSync(path).filter((e) => filterForImage(path, e));
-  let [images, dirs] = [0, 0];
-  content.forEach((file) => {
-    const s = statSync(`${path}/${file}`);
-    if (s.isDirectory()) {
-      dirs++;
-    } else if (isImage(file)) {
-      images++;
+const Utils = {
+  /**
+   * A helper function to determine if a dir is a gallery dir or
+   * just a dir that happens to maybe have some images in it.
+   */
+  isGalleryDir: function (path) {
+    const content = readdirSync(path).filter((e) =>
+      Utils.filterForImage(path, e),
+    );
+    let [images, dirs] = [0, 0];
+    content.forEach((file) => {
+      const s = statSync(`${path}/${file}`);
+      if (s.isDirectory()) {
+        dirs++;
+      } else if (Utils.isImage(file)) {
+        images++;
+      }
+    });
+    return images > 0 && dirs === 0;
+  },
+
+  /**
+   * A helper function to determine whether a URL or file path
+   * counts as "this is an image" or not.
+   */
+  isImage: function (string) {
+    if (!string) return false;
+    return formats.find((format) =>
+      string.toLowerCase().endsWith(`.${format.toLowerCase()}`),
+    );
+  },
+
+  /**
+   * A filter function that keeps all dirs and images in a
+   * dir listing, but removes everything else.
+   */
+  filterForImage: function (path, e) {
+    if (unwantedDataPaths.includes(e)) {
+      // Some file/dir paths are too stupid to allow, so if we
+      // see them, we immediately force-delete them.
+      rmSync(`${path}/${e}`, { recursive: true, force: true });
+      return false;
     }
-  });
-  return images > 0 && dirs === 0;
-}
 
-/**
- * A helper function to determine whether a URL or file path
- * counts as "this is an image" or not.
- */
-function isImage(string) {
-  if (!string) return false;
-  return formats.find((format) =>
-    string.toLowerCase().endsWith(`.${format.toLowerCase()}`),
-  );
-}
+    return statSync(`${path}/${e}`).isDirectory() || Utils.isImage(e);
+  },
 
-/**
- * A filter function that keeps all dirs and images in a
- * dir listing, but removes everything else.
- */
-function filterForImage(path, e) {
-  if (unwantedDataPaths.includes(e)) {
-    // Some file/dir paths are too stupid to allow, so if we
-    // see them, we immediately force-delete them.
-    rmSync(`${path}/${e}`, { recursive: true, force: true });
-    return false;
-  }
+  /**
+   * Sort directory content - dirs go first, after
+   * that images get sorted based on numerical suffix
+   */
+  sortDirContent: function (path, content) {
+    content.sort((a, b) => {
+      const naiveSort = a < b ? -1 : a > b ? 1 : 0;
 
-  return statSync(`${path}/${e}`).isDirectory() || isImage(e);
-}
+      // Are one or both directories?
+      const sa = statSync(`${path}/${a}`).isDirectory();
+      const sb = statSync(`${path}/${b}`).isDirectory();
+      if (sa && sb) return naiveSort;
+      if (sa) return -1;
+      if (sb) return 1;
 
-/**
- * Sort directory content - dirs go first, after
- * that images get sorted based on numerical suffix
- */
-function sortDirContent(path, content) {
-  content.sort((a, b) => {
-    const naiveSort = a < b ? -1 : a > b ? 1 : 0;
-
-    // Are one or both directories?
-    const sa = statSync(`${path}/${a}`).isDirectory();
-    const sb = statSync(`${path}/${b}`).isDirectory();
-    if (sa && sb) return naiveSort;
-    if (sa) return -1;
-    if (sb) return 1;
-
-    // If not, find the numerical suffix and sort on that.
-    const r = new RegExp(`\\d+\\.(${formats.join(`,`)})$`);
-    const ia = parseFloat(a.match(r));
-    const ib = parseFloat(b.match(r));
-    if (isNaN(ia) || isNaN(ib)) return naiveSort;
-    return ia - ib;
-  });
-}
-
+      // If not, find the numerical suffix and sort on that.
+      const r = new RegExp(`\\d+\\.(${formats.join(`,`)})$`);
+      const ia = parseFloat(a.match(r));
+      const ib = parseFloat(b.match(r));
+      if (isNaN(ia) || isNaN(ib)) return naiveSort;
+      return ia - ib;
+    });
+  },
+};
 /*****************************************************************
  *                                                               *
- *                      WEB SERVER CODE                          *
+ *                   MAIN WEB SERVER CODE                        *
  *                                                               *
  *****************************************************************/
 
-/**
- * Our "main" function, because why not.
- */
-(function main() {
+(function startBrowsing() {
   const server = createServer(routeHandler);
   server.listen(port, () => console.log(`server listening on port ${port}`));
 
@@ -654,7 +674,7 @@ function sortDirContent(path, content) {
     }
 
     // Static asset or dir request?
-    const imageExtension = isImage(url);
+    const imageExtension = Utils.isImage(url);
 
     if (!url.endsWith(`/`) && !imageExtension) {
       // Is this a direct "show me this image" line?
@@ -689,7 +709,7 @@ function sortDirContent(path, content) {
     try {
       const isDir = statSync(path).isDirectory();
       if (!isDir) throw new Error(`not a dir`);
-      const html = createPage(path, isDir, url === `/`);
+      const html = Generator.page(path, isDir, url === `/`);
       res.writeHead(200, { [contentType]: `text/HTML` });
       res.end(`<!doctype html>\n${html}`);
     } catch (e) {
@@ -761,7 +781,7 @@ function sortDirContent(path, content) {
     }
 
     // Not a gallery dir?
-    if (!isGalleryDir(path)) {
+    if (!Utils.isGalleryDir(path)) {
       return respond(`not a gallery folder`);
     }
 
