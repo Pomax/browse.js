@@ -92,17 +92,18 @@ import {
  *                                                               *
  *****************************************************************/
 
+// SET THIS TO WHATEVER WORKS FOR YOU:
+const concurrency = 5;
+
+// The rest of these shouldn't really need modifying
 const imageCacheDuration = 604800;
 const contentType = `Content-Type`;
 const cacheControl = `Cache-Control`;
 const base = normalize(import.meta.dirname);
 const formats = [`jpg`, `jpeg`, `png`, `webp`];
-const npm = process.platform === `win32` ? `npm.cmd` : `npm`;
 const unwantedDataPaths = [`@eaDir`, `.DS_Store`, `Thumbs.db`];
-const port = process.argv[process.argv.indexOf(`--port`) + 1] ?? 8080;
-
-// SET THIS TO WHATEVER WORKS FOR YOU:
-const concurrency = 5;
+const portIndex = process.argv.indexOf(`--port`);
+const port = portIndex >= 0 ? process.argv[portIndex + 1] : 8080;
 
 /*****************************************************************
  *                                                               *
